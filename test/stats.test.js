@@ -30,6 +30,10 @@ test('computeStats computes mode (most voted)', () => {
   assert.equal(computeStats([5, 5, 8, 13]).mode, 5);
 });
 
+test('computeStats returns the lowest card on a mode tie', () => {
+  assert.equal(computeStats([5, 5, 8, 8]).mode, 5);
+});
+
 test('consensusLevel returns null when no numeric votes', () => {
   assert.equal(consensusLevel(['?', '☕'], DECK), null);
 });

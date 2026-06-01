@@ -1,7 +1,7 @@
 // Pure statistics + consensus logic for Scrum Poker. No I/O, no sockets.
 
 function numericVotes(votes) {
-  return votes.filter((v) => typeof v === 'number');
+  return votes.filter((v) => typeof v === 'number' && !Number.isNaN(v));
 }
 
 export function computeStats(votes) {
@@ -17,6 +17,8 @@ export function computeStats(votes) {
 
   const counts = new Map();
   for (const n of nums) counts.set(n, (counts.get(n) || 0) + 1);
+  // On a tie, the lowest value wins: nums is sorted ascending, and `best` only
+  // updates on a strictly greater count, so the first (smallest) max stays.
   let mode = nums[0];
   let best = 0;
   for (const [value, count] of counts) {
