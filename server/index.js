@@ -60,6 +60,7 @@ io.on('connection', (socket) => {
     }
     const cleanName = String(name || 'Anônimo').slice(0, 40);
     addParticipant(room, cleanClientId, cleanName);
+    delete room.emptySince; // room is occupied again; cancel any pending cleanup
     sessions.set(socket.id, { code, clientId: cleanClientId });
     socket.join(code);
     broadcastRoom(code);
@@ -119,7 +120,10 @@ setInterval(() => {
   for (const [code, room] of store.rooms) {
     if (hasConnectedParticipants(room)) {
       delete room.emptySince;
-    } else if (room.emptySince && now - room.emptySince > EMPTY_ROOM_GRACE_MS) {
+    } else if (!room.emptySince) {
+      // Stamp empty rooms (incl. created-but-never-joined) so they age out.
+      room.emptySince = now;
+    } else if (now - room.emptySince > EMPTY_ROOM_GRACE_MS) {
       store.deleteRoom(code);
     }
   }

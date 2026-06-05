@@ -10,7 +10,7 @@ function getClientId() {
 
 const clientId = getClientId();
 const name = localStorage.getItem('name') || 'Anônimo';
-const code = new URLSearchParams(location.search).get('code');
+const code = (new URLSearchParams(location.search).get('code') || '').toUpperCase();
 
 if (!code) location.href = 'index.html';
 
@@ -51,9 +51,16 @@ socket.on('roomState', (s) => {
 
 els.share.addEventListener('click', () => {
   const url = `${location.origin}/index.html?code=${encodeURIComponent(code)}`;
-  navigator.clipboard.writeText(url);
-  els.share.textContent = 'link copiado!';
-  setTimeout(() => (els.share.textContent = 'copiar link'), 1500);
+  // navigator.clipboard is undefined in non-secure contexts (plain HTTP, non-localhost).
+  const copied = navigator.clipboard?.writeText(url);
+  if (copied) {
+    copied.then(() => {
+      els.share.textContent = 'link copiado!';
+      setTimeout(() => (els.share.textContent = 'copiar link'), 1500);
+    });
+  } else {
+    els.share.textContent = url;
+  }
 });
 
 function isFacilitator() {
