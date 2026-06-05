@@ -9,6 +9,7 @@ import {
   newRound,
   setStory,
   disconnectParticipant,
+  hasConnectedParticipants,
   serializeRoom,
   createRoomStore,
 } from '../server/rooms.js';
@@ -141,4 +142,22 @@ test('createRoomStore generates unique codes and stores rooms', () => {
   assert.notEqual(a.code, b.code);
   assert.equal(store.getRoom(a.code), a);
   assert.equal(store.getRoom('NOPE'), undefined);
+});
+
+test('hasConnectedParticipants reflects connection state', () => {
+  const room = makeRoom('R', 'fac-1');
+  assert.equal(hasConnectedParticipants(room), false); // empty
+  addParticipant(room, 'fac-1', 'Ana');
+  addParticipant(room, 'p-2', 'Bruno');
+  assert.equal(hasConnectedParticipants(room), true);
+  disconnectParticipant(room, 'fac-1');
+  disconnectParticipant(room, 'p-2');
+  assert.equal(hasConnectedParticipants(room), false); // all disconnected
+});
+
+test('deleteRoom removes a room from the store', () => {
+  const store = createRoomStore();
+  const room = store.createRoom('fac-1');
+  store.deleteRoom(room.code);
+  assert.equal(store.getRoom(room.code), undefined);
 });
