@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { Server } from 'socket.io';
+import { argv } from 'node:process';
 import {
   createRoomStore,
   addParticipant,
@@ -125,6 +126,10 @@ setInterval(() => {
   }
 }, 60 * 1000).unref();
 
-httpServer.listen(PORT, () => {
-  console.log(`Scrum Poker rodando em http://localhost:${PORT}`);
-});
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  httpServer.listen(PORT, () => {
+    console.log(`Scrum Poker rodando em http://localhost:${PORT}`);
+  });
+}
+
+export { httpServer, app };
