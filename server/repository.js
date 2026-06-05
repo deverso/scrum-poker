@@ -1,7 +1,16 @@
 // Async SQL CRUD over libSQL. No sockets, no Express. All functions take the db client.
 
+function safeParseVotes(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return [];
+  }
+}
+
 export async function upsertRoom(db, room, now) {
   await db.execute({
+    // created_at is intentionally omitted from DO UPDATE so it is set only on first insert.
     sql: `INSERT INTO rooms (code, facilitator_id, story_title, revealed, created_at, last_activity_at)
           VALUES (?, ?, ?, ?, ?, ?)
           ON CONFLICT(code) DO UPDATE SET
@@ -9,7 +18,7 @@ export async function upsertRoom(db, room, now) {
             story_title    = excluded.story_title,
             revealed       = excluded.revealed,
             last_activity_at = excluded.last_activity_at`,
-    args: [room.code, room.facilitatorId, room.storyTitle, room.revealed ? 1 : 0, now, now],
+    args: [room.code, room.facilitatorId, room.storyTitle ?? '', room.revealed ? 1 : 0, now, now],
   });
 }
 
@@ -94,7 +103,7 @@ export async function getEstimatesByCode(db, code) {
     median: r.median,
     mode: r.mode,
     consensus: r.consensus,
-    votes: JSON.parse(r.votes_json),
+    votes: safeParseVotes(r.votes_json),
     voterCount: Number(r.voter_count),
     createdAt: Number(r.created_at),
   }));

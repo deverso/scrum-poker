@@ -28,11 +28,12 @@ test('upsertParticipant inserts then updates vote/connected', async () => {
   const db = await freshDb();
   await repo.upsertRoom(db, { code: 'R', facilitatorId: 'A', storyTitle: '', revealed: false }, T0);
   await repo.upsertParticipant(db, 'R', 'A', { name: 'Ana', vote: null, connected: true }, T0);
-  await repo.upsertParticipant(db, 'R', 'A', { name: 'Ana', vote: 5, connected: true }, T0);
+  await repo.upsertParticipant(db, 'R', 'A', { name: 'Ana', vote: 5, connected: true }, T0 + 30);
   const row = (await db.execute({ sql: 'SELECT * FROM participants WHERE room_code=? AND client_id=?', args: ['R', 'A'] })).rows[0];
   assert.equal(row.name, 'Ana');
   assert.equal(row.vote, '5');       // stored as TEXT
   assert.equal(Number(row.connected), 1);
+  assert.equal(Number(row.joined_at), T0); // joined_at preserved on conflict
 });
 
 test('deleteRoom removes the room and its participants', async () => {
@@ -86,4 +87,11 @@ test('insertEstimate stores a snapshot and getEstimatesByCode returns it newest-
   assert.equal(list[0].finalValue, '3');
   assert.deepEqual(list[1].votes, [{ name: 'Ana', vote: 5 }, { name: 'Bruno', vote: 8 }]);
   assert.equal(list[1].voterCount, 2);
+});
+
+test('deleteExpiredRooms returns an empty array when nothing is expired', async () => {
+  const db = await freshDb();
+  await repo.upsertRoom(db, { code: 'FRESH', facilitatorId: 'A', storyTitle: '', revealed: false }, T0);
+  const removed = await repo.deleteExpiredRooms(db, 5_000, T0);
+  assert.deepEqual(removed, []);
 });
