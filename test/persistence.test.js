@@ -20,6 +20,7 @@ test('parseVote converts numeric text to number and keeps special cards', () => 
   assert.equal(parseVote('?'), '?');
   assert.equal(parseVote('☕'), '☕');
   assert.equal(parseVote(null), null);
+  assert.equal(parseVote(undefined), null);
 });
 
 test('persistFullRoom + reloadRooms reconstructs the room with votes, connected=false', async () => {
@@ -81,4 +82,5 @@ test('persistRoomMeta updates room fields without participants', async () => {
   const loaded = store.getRoom('R');
   assert.equal(loaded.revealed, true);
   assert.equal(loaded.storyTitle, 'Edited');
+  assert.equal(loaded.lastActivityAt, T0 + 10);
 });

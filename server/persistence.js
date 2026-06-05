@@ -10,21 +10,22 @@ export function parseVote(text) {
   return Number.isNaN(n) ? text : n;
 }
 
-// Room metadata only (story, revealed, facilitator, activity).
+// Room metadata only (story, revealed, facilitator, activity); also stamps room.lastActivityAt.
 export async function persistRoomMeta(db, room, now) {
   room.lastActivityAt = now;
   await repo.upsertRoom(db, room, now);
 }
 
-// One participant + room activity touch.
+// One participant + room activity touch; also stamps room.lastActivityAt.
 export async function persistParticipant(db, room, clientId, now) {
-  room.lastActivityAt = now;
   const p = room.participants.get(clientId);
+  if (!p) return;
+  room.lastActivityAt = now;
   await repo.upsertRoom(db, room, now);
-  if (p) await repo.upsertParticipant(db, room.code, clientId, p, now);
+  await repo.upsertParticipant(db, room.code, clientId, p, now);
 }
 
-// Whole room: meta + every participant (used on join and newRound).
+// Whole room: meta + every participant (used on join and newRound); also stamps room.lastActivityAt.
 export async function persistFullRoom(db, room, now) {
   room.lastActivityAt = now;
   await repo.upsertRoom(db, room, now);
