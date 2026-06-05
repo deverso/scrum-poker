@@ -1,26 +1,36 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { io as ioc } from 'socket.io-client';
-import { httpServer } from '../server/index.js';
+import { createServer } from '../server/index.js';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
 
 // ──────────────────────────────────────────────
 // Server lifecycle helpers
 // ──────────────────────────────────────────────
 
 let PORT;
+let server;
+
+async function startServer() {
+  const config = {
+    port: 0,
+    roomTtlMs: 24 * 60 * 60 * 1000,
+    databaseUrl: `file:${tmpdir()}/scrum-int-${randomUUID()}.db`,
+    databaseAuthToken: undefined,
+  };
+  server = await createServer(config);
+  await new Promise((resolve) => server.httpServer.listen(0, resolve));
+  return server.httpServer.address().port;
+}
 
 before(async () => {
-  await new Promise((resolve) => {
-    httpServer.listen(0, '127.0.0.1', () => {
-      PORT = httpServer.address().port;
-      resolve();
-    });
-  });
+  PORT = await startServer();
 });
 
 after(async () => {
   await new Promise((resolve, reject) => {
-    httpServer.close((err) => (err ? reject(err) : resolve()));
+    server.httpServer.close((err) => (err ? reject(err) : resolve()));
   });
 });
 
