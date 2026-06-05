@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scrum Poker</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="home">
+  <main class="home-card">
+    <h1>🃏 Scrum Poker</h1>
+    <p class="tagline">Estimativa colaborativa para a planning do time.</p>
+
+    <label>Seu nome
+      <input id="name" type="text" placeholder="Ex: Ana" maxlength="40" />
+    </label>
+
+    <button id="create" class="btn primary">Criar sala</button>
+
+    <div class="divider"><span>ou entrar numa sala</span></div>
+
+    <label>Código da sala
+      <input id="code" type="text" placeholder="PLAY-XXXX" autocomplete="off" />
+    </label>
+    <button id="join" class="btn">Entrar</button>
+
+    <p id="error" class="error" hidden></p>
+  </main>
+
+  <script src="home.js"></script>
+</body>
+</html>
