@@ -1,0 +1,18 @@
+# Render Blueprint (infra-as-code) para o Scrum Poker.
+# Doc: https://render.com/docs/blueprint-spec
+# Como usar: no Render, New → Blueprint → selecione o repo deverso/scrum-poker.
+services:
+  - type: web
+    name: scrum-poker
+    runtime: node
+    plan: free
+    # region mais próxima do Brasil (menor latência no WebSocket). Opções: oregon, virginia, frankfurt, singapore.
+    region: virginia
+    buildCommand: npm install
+    startCommand: npm start
+    # A raiz serve o index.html (200), serve de health check.
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
