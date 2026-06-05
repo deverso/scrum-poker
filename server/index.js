@@ -53,9 +53,14 @@ io.on('connection', (socket) => {
       socket.emit('errorMessage', { message: 'Sala não encontrada.' });
       return;
     }
+    const cleanClientId = String(clientId || '').trim().slice(0, 64);
+    if (!cleanClientId) {
+      socket.emit('errorMessage', { message: 'Identificador inválido.' });
+      return;
+    }
     const cleanName = String(name || 'Anônimo').slice(0, 40);
-    addParticipant(room, clientId, cleanName);
-    sessions.set(socket.id, { code, clientId });
+    addParticipant(room, cleanClientId, cleanName);
+    sessions.set(socket.id, { code, clientId: cleanClientId });
     socket.join(code);
     broadcastRoom(code);
   });
@@ -118,7 +123,7 @@ setInterval(() => {
       store.deleteRoom(code);
     }
   }
-}, 60 * 1000);
+}, 60 * 1000).unref();
 
 httpServer.listen(PORT, () => {
   console.log(`Scrum Poker rodando em http://localhost:${PORT}`);
