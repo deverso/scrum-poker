@@ -45,16 +45,30 @@ export async function createServer(config) {
     const clientId = String(req.body?.clientId || '').trim();
     if (!clientId) return res.status(400).json({ error: 'clientId required' });
     const room = store.createRoom(clientId);
-    await persistRoomMeta(db, room, Date.now());
+    try {
+      await persistRoomMeta(db, room, Date.now());
+    } catch (err) {
+      store.deleteRoom(room.code); // roll back the in-memory room if persistence failed
+      console.error('[server error] create room', err);
+      return res.status(500).json({ error: 'could not create room' });
+    }
     res.json({ code: room.code });
   });
 
   // Read the full history for a code (works even after the live room expired).
   app.get('/api/rooms/:code/estimates', async (req, res) => {
     const code = String(req.params.code || '').toUpperCase();
-    const estimates = await repo.getEstimatesByCode(db, code);
-    res.json({ code, estimates });
+    try {
+      const estimates = await repo.getEstimatesByCode(db, code);
+      res.json({ code, estimates });
+    } catch (err) {
+      console.error('[server error] get estimates', err);
+      res.status(500).json({ error: 'could not load history' });
+    }
   });
+
+  // Wrap async socket/interval callbacks so a rejected DB write logs instead of crashing the process.
+  const guard = (fn) => (...args) => fn(...args).catch((err) => console.error('[server error]', err));
 
   const sessions = new Map(); // socket.id -> { code, clientId }
 
@@ -68,7 +82,7 @@ export async function createServer(config) {
   }
 
   io.on('connection', (socket) => {
-    socket.on('joinRoom', async ({ code, name, clientId }) => {
+    socket.on('joinRoom', guard(async ({ code, name, clientId }) => {
       const room = store.getRoom(code);
       if (!room) {
         socket.emit('errorMessage', { message: 'Sala não encontrada.' });
@@ -85,9 +99,9 @@ export async function createServer(config) {
       socket.join(code);
       broadcastRoom(code);
       await persistFullRoom(db, room, Date.now());
-    });
+    }));
 
-    socket.on('vote', async ({ value }) => {
+    socket.on('vote', guard(async ({ value }) => {
       const sess = sessions.get(socket.id);
       if (!sess) return;
       const room = store.getRoom(sess.code);
@@ -95,9 +109,9 @@ export async function createServer(config) {
       setVote(room, sess.clientId, value);
       broadcastRoom(sess.code);
       await persistParticipant(db, room, sess.clientId, Date.now());
-    });
+    }));
 
-    socket.on('reveal', async () => {
+    socket.on('reveal', guard(async () => {
       const sess = sessions.get(socket.id);
       if (!sess) return;
       const room = store.getRoom(sess.code);
@@ -105,19 +119,20 @@ export async function createServer(config) {
       reveal(room, sess.clientId);
       broadcastRoom(sess.code);
       await persistRoomMeta(db, room, Date.now());
-    });
+    }));
 
-    socket.on('newRound', async () => {
+    socket.on('newRound', guard(async () => {
       const sess = sessions.get(socket.id);
       if (!sess) return;
       const room = store.getRoom(sess.code);
       if (!room) return;
       newRound(room, sess.clientId);
+      room.estimateSaved = false;
       broadcastRoom(sess.code);
       await persistFullRoom(db, room, Date.now());
-    });
+    }));
 
-    socket.on('setStory', async ({ title }) => {
+    socket.on('setStory', guard(async ({ title }) => {
       const sess = sessions.get(socket.id);
       if (!sess) return;
       const room = store.getRoom(sess.code);
@@ -125,16 +140,19 @@ export async function createServer(config) {
       setStory(room, sess.clientId, title);
       broadcastRoom(sess.code);
       await persistRoomMeta(db, room, Date.now());
-    });
+    }));
 
-    socket.on('saveEstimate', async ({ finalValue }) => {
+    socket.on('saveEstimate', guard(async ({ finalValue }) => {
       const sess = sessions.get(socket.id);
       if (!sess) return;
       const room = store.getRoom(sess.code);
       if (!room) return;
       if (sess.clientId !== room.facilitatorId) return; // facilitator only
       if (!room.revealed) return;                        // only after reveal
-      if (!room.deck.includes(finalValue)) return;       // must be a deck card
+      const card = room.deck.find((v) => String(v) === String(finalValue));
+      if (card === undefined) return;                    // must be a deck card
+      if (room.estimateSaved) return;                    // already saved this round
+      room.estimateSaved = true;
 
       const snapshot = voteSnapshot(room);
       const numericVotes = snapshot.map((s) => s.vote);
@@ -143,7 +161,7 @@ export async function createServer(config) {
       const est = {
         roomCode: room.code,
         storyTitle: room.storyTitle,
-        finalValue,
+        finalValue: card,
         average: stats ? stats.average : null,
         median: stats ? stats.median : null,
         mode: stats ? stats.mode : null,
@@ -155,15 +173,15 @@ export async function createServer(config) {
       room.history.unshift({
         id,
         storyTitle: est.storyTitle,
-        finalValue,
+        finalValue: card,
         consensus: est.consensus,
         createdAt: now,
       });
       await persistRoomMeta(db, room, now); // touch activity
       broadcastRoom(sess.code);
-    });
+    }));
 
-    socket.on('disconnect', async () => {
+    socket.on('disconnect', guard(async () => {
       const sess = sessions.get(socket.id);
       if (!sess) return;
       sessions.delete(socket.id);
@@ -172,14 +190,14 @@ export async function createServer(config) {
       disconnectParticipant(room, sess.clientId);
       broadcastRoom(sess.code);
       await persistParticipant(db, room, sess.clientId, Date.now());
-    });
+    }));
   });
 
   // Periodically expire rooms inactive beyond the TTL (memory + DB).
-  const sweep = setInterval(async () => {
+  const sweep = setInterval(guard(async () => {
     const removed = await repo.deleteExpiredRooms(db, config.roomTtlMs, Date.now());
     for (const code of removed) store.rooms.delete(code);
-  }, 60 * 1000);
+  }), 60 * 1000);
   sweep.unref();
 
   return { httpServer, app, store, db };
