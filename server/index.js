@@ -196,7 +196,7 @@ export async function createServer(config) {
   // Periodically expire rooms inactive beyond the TTL (memory + DB).
   const sweep = setInterval(guard(async () => {
     const removed = await repo.deleteExpiredRooms(db, config.roomTtlMs, Date.now());
-    for (const code of removed) store.rooms.delete(code);
+    for (const code of removed) store.deleteRoom(code);
   }), 60 * 1000);
   sweep.unref();
 

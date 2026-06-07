@@ -61,6 +61,10 @@ export async function reloadRooms(db, store, ttlMs, now) {
     }
     const estimates = await repo.getEstimatesByCode(db, r.code);
     room.history = estimates.map(toHistorySummary);
+    // Restore the in-round idempotency flag: if this room is still revealed and
+    // already has saved history, treat the current round as already-saved so a
+    // post-restart re-save doesn't create a duplicate row.
+    room.estimateSaved = room.revealed && room.history.length > 0;
     store.rooms.set(room.code, room);
   }
 }
