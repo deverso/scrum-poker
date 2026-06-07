@@ -174,3 +174,21 @@ body.home {
 .save-label { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
 .save-cards { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 12px; }
 .save-cards .card { width: 40px; height: 56px; font-size: 16px; }
+
+.hist-toggle { cursor: pointer; text-decoration: underline; }
+.sidebar {
+  position: fixed; top: 0; right: 0; width: 300px; max-width: 90vw; height: 100vh;
+  background: var(--panel); border-left: 1px solid var(--panel-2);
+  padding: 16px; overflow-y: auto; box-shadow: -8px 0 24px rgba(0,0,0,.4);
+  transition: transform 0.2s; z-index: 10;
+}
+.sidebar.hidden { transform: translateX(110%); }
+.sidebar-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.sidebar-close { cursor: pointer; color: var(--muted); }
+.hist-empty { color: var(--muted); font-size: 13px; }
+.hist-item { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--panel-2); font-size: 13px; }
+.hist-value { background: var(--accent); color: #fff; border-radius: 6px; padding: 2px 8px; font-weight: 700; min-width: 22px; text-align: center; }
+.hist-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hist-when { color: var(--muted); font-size: 11px; }
+.hist-link { display: block; margin-top: 12px; color: var(--accent); font-size: 13px; }
+#exportCsv { margin-top: 12px; }

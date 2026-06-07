@@ -29,6 +29,12 @@ const els = {
   actions: document.getElementById('actions'),
   hint: document.getElementById('hint'),
   share: document.getElementById('share'),
+  sidebar: document.getElementById('sidebar'),
+  histToggle: document.getElementById('histToggle'),
+  sidebarClose: document.getElementById('sidebarClose'),
+  historyList: document.getElementById('historyList'),
+  exportCsv: document.getElementById('exportCsv'),
+  histPageLink: document.getElementById('histPageLink'),
 };
 
 const CONSENSUS_TEXT = {
@@ -66,6 +72,24 @@ els.share.addEventListener('click', () => {
   }
 });
 
+els.histToggle.addEventListener('click', () => els.sidebar.classList.toggle('hidden'));
+els.sidebarClose.addEventListener('click', () => els.sidebar.classList.add('hidden'));
+els.histPageLink.href = `history.html?code=${encodeURIComponent(code)}`;
+
+els.exportCsv.addEventListener('click', () => {
+  const rows = [['historia', 'valor_final', 'consenso', 'data']];
+  for (const h of state.history || []) {
+    rows.push([h.storyTitle || '', h.finalValue, h.consensus || '', new Date(h.createdAt).toISOString()]);
+  }
+  const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(csv).then(() => {
+      els.exportCsv.textContent = 'CSV copiado!';
+      setTimeout(() => (els.exportCsv.textContent = 'copiar CSV'), 1500);
+    });
+  }
+});
+
 function isFacilitator() {
   return state && state.facilitatorId === clientId;
 }
@@ -85,6 +109,7 @@ function render() {
   renderSave();
   renderHand();
   renderActions();
+  renderHistory();
 }
 
 function renderStory() {
@@ -239,4 +264,36 @@ function renderActions() {
     btn.addEventListener('click', () => socket.emit('reveal'));
   }
   els.actions.appendChild(btn);
+}
+
+function fmtDate(ms) {
+  const d = new Date(ms);
+  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function renderHistory() {
+  els.historyList.innerHTML = '';
+  const items = state.history || [];
+  if (items.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'hist-empty';
+    empty.textContent = 'Nenhuma estimativa salva ainda.';
+    els.historyList.appendChild(empty);
+    return;
+  }
+  for (const h of items) {
+    const row = document.createElement('div');
+    row.className = 'hist-item';
+    const val = document.createElement('span');
+    val.className = 'hist-value';
+    val.textContent = h.finalValue;
+    const title = document.createElement('span');
+    title.className = 'hist-title';
+    title.textContent = h.storyTitle || '(sem título)';
+    const when = document.createElement('span');
+    when.className = 'hist-when';
+    when.textContent = fmtDate(h.createdAt);
+    row.append(val, title, when);
+    els.historyList.appendChild(row);
+  }
 }

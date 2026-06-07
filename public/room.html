@@ -10,8 +10,18 @@
   <main class="room">
     <div class="topbar">
       <span>Sala <b id="roomCode"></b> · <span class="share" id="share">copiar link</span></span>
-      <span id="count"></span>
+      <span><span class="hist-toggle" id="histToggle">histórico</span> · <span id="count"></span></span>
     </div>
+
+    <aside class="sidebar hidden" id="sidebar">
+      <div class="sidebar-head">
+        <b>Histórico</b>
+        <span class="sidebar-close" id="sidebarClose">✕</span>
+      </div>
+      <div id="historyList"></div>
+      <button class="btn" id="exportCsv">copiar CSV</button>
+      <a class="hist-link" id="histPageLink" target="_blank">abrir página do histórico ↗</a>
+    </aside>
 
     <div class="story" id="story"></div>
     <div class="table" id="table"></div>
