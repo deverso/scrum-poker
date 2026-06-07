@@ -16,6 +16,7 @@ if (!code) location.href = 'index.html';
 
 const socket = io();
 let state = null;
+let finalValue = null; // facilitator's chosen final card before saving
 
 const els = {
   roomCode: document.getElementById('roomCode'),
@@ -23,10 +24,17 @@ const els = {
   story: document.getElementById('story'),
   table: document.getElementById('table'),
   result: document.getElementById('result'),
+  save: document.getElementById('save'),
   hand: document.getElementById('hand'),
   actions: document.getElementById('actions'),
   hint: document.getElementById('hint'),
   share: document.getElementById('share'),
+  sidebar: document.getElementById('sidebar'),
+  histToggle: document.getElementById('histToggle'),
+  sidebarClose: document.getElementById('sidebarClose'),
+  historyList: document.getElementById('historyList'),
+  exportCsv: document.getElementById('exportCsv'),
+  histPageLink: document.getElementById('histPageLink'),
 };
 
 const CONSENSUS_TEXT = {
@@ -45,6 +53,7 @@ socket.on('errorMessage', ({ message }) => {
 });
 
 socket.on('roomState', (s) => {
+  if (state && state.revealed && !s.revealed) finalValue = null; // round was reset
   state = s;
   render();
 });
@@ -60,6 +69,24 @@ els.share.addEventListener('click', () => {
     });
   } else {
     els.share.textContent = url;
+  }
+});
+
+els.histToggle.addEventListener('click', () => els.sidebar.classList.toggle('hidden'));
+els.sidebarClose.addEventListener('click', () => els.sidebar.classList.add('hidden'));
+els.histPageLink.href = `history.html?code=${encodeURIComponent(code)}`;
+
+els.exportCsv.addEventListener('click', () => {
+  const rows = [['historia', 'valor_final', 'consenso', 'data']];
+  for (const h of state.history || []) {
+    rows.push([h.storyTitle || '', h.finalValue, h.consensus || '', new Date(h.createdAt).toISOString()]);
+  }
+  const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(csv).then(() => {
+      els.exportCsv.textContent = 'CSV copiado!';
+      setTimeout(() => (els.exportCsv.textContent = 'copiar CSV'), 1500);
+    });
   }
 });
 
@@ -79,8 +106,10 @@ function render() {
   renderStory();
   renderTable();
   renderResult();
+  renderSave();
   renderHand();
   renderActions();
+  renderHistory();
 }
 
 function renderStory() {
@@ -160,6 +189,50 @@ function renderResult() {
   }
 }
 
+function renderSave() {
+  els.save.innerHTML = '';
+  // Only the facilitator, only after reveal.
+  if (!isFacilitator() || !state.revealed) return;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'save-box';
+
+  const label = document.createElement('div');
+  label.className = 'save-label';
+  label.textContent = 'Valor final acordado:';
+  wrap.appendChild(label);
+
+  // Default the selection to the most-voted card (mode) once per reveal.
+  if (finalValue === null && state.stats) finalValue = state.stats.mode;
+
+  const cards = document.createElement('div');
+  cards.className = 'save-cards';
+  for (const value of state.deck) {
+    const card = document.createElement('div');
+    const special = typeof value !== 'number';
+    card.className = 'card' + (special ? ' special' : '') + (value === finalValue ? ' selected' : '');
+    card.textContent = value;
+    card.addEventListener('click', () => {
+      finalValue = value;
+      renderSave();
+    });
+    cards.appendChild(card);
+  }
+  wrap.appendChild(cards);
+
+  const btn = document.createElement('button');
+  btn.className = 'btn primary';
+  btn.textContent = 'Salvar estimativa';
+  btn.disabled = finalValue === null;
+  btn.addEventListener('click', () => {
+    if (finalValue === null) return;
+    socket.emit('saveEstimate', { finalValue });
+  });
+  wrap.appendChild(btn);
+
+  els.save.appendChild(wrap);
+}
+
 function renderHand() {
   els.hand.innerHTML = '';
   if (state.revealed) return; // no voting while revealed
@@ -191,4 +264,36 @@ function renderActions() {
     btn.addEventListener('click', () => socket.emit('reveal'));
   }
   els.actions.appendChild(btn);
+}
+
+function fmtDate(ms) {
+  const d = new Date(ms);
+  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function renderHistory() {
+  els.historyList.innerHTML = '';
+  const items = state.history || [];
+  if (items.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'hist-empty';
+    empty.textContent = 'Nenhuma estimativa salva ainda.';
+    els.historyList.appendChild(empty);
+    return;
+  }
+  for (const h of items) {
+    const row = document.createElement('div');
+    row.className = 'hist-item';
+    const val = document.createElement('span');
+    val.className = 'hist-value';
+    val.textContent = h.finalValue;
+    const title = document.createElement('span');
+    title.className = 'hist-title';
+    title.textContent = h.storyTitle || '(sem título)';
+    const when = document.createElement('span');
+    when.className = 'hist-when';
+    when.textContent = fmtDate(h.createdAt);
+    row.append(val, title, when);
+    els.historyList.appendChild(row);
+  }
 }

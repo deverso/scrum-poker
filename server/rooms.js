@@ -11,6 +11,7 @@ export function makeRoom(code, facilitatorId) {
     revealed: false,
     deck: DECK,
     participants: new Map(), // clientId -> { name, vote, connected }
+    history: [], // [{ id, storyTitle, finalValue, consensus, createdAt }] — newest first
   };
 }
 
@@ -71,6 +72,13 @@ export function hasConnectedParticipants(room) {
   return false;
 }
 
+// Snapshot of who voted (name + vote), used when saving an estimate to history.
+export function voteSnapshot(room) {
+  return [...room.participants.values()]
+    .filter((p) => p.vote !== null)
+    .map((p) => ({ name: p.name, vote: p.vote }));
+}
+
 export function serializeRoom(room, viewerId) {
   const participants = [...room.participants.entries()].map(([clientId, p]) => ({
     clientId,
@@ -93,6 +101,7 @@ export function serializeRoom(room, viewerId) {
     participants,
     stats: room.revealed ? computeStats(votes) : null,
     consensus: room.revealed ? consensusLevel(votes, room.deck) : null,
+    history: room.history ?? [],
   };
 }
 

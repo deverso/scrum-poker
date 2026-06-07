@@ -12,6 +12,7 @@ import {
   hasConnectedParticipants,
   serializeRoom,
   createRoomStore,
+  voteSnapshot,
 } from '../server/rooms.js';
 
 test('makeRoom creates an empty unrevealed room with the facilitator set', () => {
@@ -22,6 +23,7 @@ test('makeRoom creates an empty unrevealed room with the facilitator set', () =>
   assert.equal(room.storyTitle, '');
   assert.deepEqual(room.deck, DECK);
   assert.equal(room.participants.size, 0);
+  assert.deepEqual(room.history, []);
 });
 
 test('addParticipant adds a new participant with no vote', () => {
@@ -160,4 +162,26 @@ test('deleteRoom removes a room from the store', () => {
   const room = store.createRoom('fac-1');
   store.deleteRoom(room.code);
   assert.equal(store.getRoom(room.code), undefined);
+});
+
+test('voteSnapshot returns only participants who voted, with name and vote', () => {
+  const room = makeRoom('R', 'fac-1');
+  addParticipant(room, 'fac-1', 'Ana');
+  addParticipant(room, 'p-2', 'Bruno');
+  addParticipant(room, 'p-3', 'Carla');
+  setVote(room, 'fac-1', 5);
+  setVote(room, 'p-2', 8);
+  // Carla did not vote
+  const snap = voteSnapshot(room);
+  assert.deepEqual(snap, [
+    { name: 'Ana', vote: 5 },
+    { name: 'Bruno', vote: 8 },
+  ]);
+});
+
+test('serializeRoom includes the history array', () => {
+  const room = makeRoom('R', 'fac-1');
+  room.history = [{ id: 1, storyTitle: 'Login', finalValue: '5', consensus: 'close', createdAt: 10 }];
+  const view = serializeRoom(room, 'fac-1');
+  assert.deepEqual(view.history, [{ id: 1, storyTitle: 'Login', finalValue: '5', consensus: 'close', createdAt: 10 }]);
 });

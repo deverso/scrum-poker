@@ -1,26 +1,36 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { io as ioc } from 'socket.io-client';
-import { httpServer } from '../server/index.js';
+import { createServer } from '../server/index.js';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
 
 // ──────────────────────────────────────────────
 // Server lifecycle helpers
 // ──────────────────────────────────────────────
 
 let PORT;
+let server;
+
+async function startServer() {
+  const config = {
+    port: 0,
+    roomTtlMs: 24 * 60 * 60 * 1000,
+    databaseUrl: `file:${tmpdir()}/scrum-int-${randomUUID()}.db`,
+    databaseAuthToken: undefined,
+  };
+  server = await createServer(config);
+  await new Promise((resolve) => server.httpServer.listen(0, resolve));
+  return server.httpServer.address().port;
+}
 
 before(async () => {
-  await new Promise((resolve) => {
-    httpServer.listen(0, '127.0.0.1', () => {
-      PORT = httpServer.address().port;
-      resolve();
-    });
-  });
+  PORT = await startServer();
 });
 
 after(async () => {
   await new Promise((resolve, reject) => {
-    httpServer.close((err) => (err ? reject(err) : resolve()));
+    server.httpServer.close((err) => (err ? reject(err) : resolve()));
   });
 });
 
@@ -284,4 +294,141 @@ test('6. facilitator promotion on disconnect', async () => {
     // sockA already disconnected
     sockB.disconnect();
   }
+});
+
+test('7. room state and history survive a server restart', async () => {
+  const config = {
+    port: 0,
+    roomTtlMs: 24 * 60 * 60 * 1000,
+    databaseUrl: `file:${tmpdir()}/scrum-restart-${randomUUID()}.db`,
+    databaseAuthToken: undefined,
+  };
+
+  // --- First server instance ---
+  const s1 = await createServer(config);
+  await new Promise((r) => s1.httpServer.listen(0, r));
+  const port1 = s1.httpServer.address().port;
+
+  const created = await fetch(`http://127.0.0.1:${port1}/api/rooms`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientId: 'A' }),
+  }).then((r) => r.json());
+  const code = created.code;
+
+  const a1 = ioc(`http://127.0.0.1:${port1}`, { forceNew: true, transports: ['websocket'] });
+  const b1 = ioc(`http://127.0.0.1:${port1}`, { forceNew: true, transports: ['websocket'] });
+  a1.emit('joinRoom', { code, name: 'Ana', clientId: 'A' });
+  b1.emit('joinRoom', { code, name: 'Bruno', clientId: 'B' });
+  await waitForRoomState(a1, (s) => s.participants.length === 2);
+  a1.emit('vote', { value: 5 });
+  b1.emit('vote', { value: 8 });
+  await waitForRoomState(a1, (s) => s.participants.find((p) => p.clientId === 'B')?.hasVoted);
+  a1.emit('reveal');
+  await waitForRoomState(a1, (s) => s.revealed === true);
+  a1.emit('saveEstimate', { finalValue: 5 });
+  await waitForRoomState(a1, (s) => s.history.length === 1);
+
+  a1.close();
+  b1.close();
+  await new Promise((r) => s1.httpServer.close(r));
+
+  // --- Second server instance, same DB file (simulated restart) ---
+  const s2 = await createServer(config);
+  await new Promise((r) => s2.httpServer.listen(0, r));
+  const port2 = s2.httpServer.address().port;
+
+  const a2 = ioc(`http://127.0.0.1:${port2}`, { forceNew: true, transports: ['websocket'] });
+  a2.emit('joinRoom', { code, name: 'Ana', clientId: 'A' });
+  const state = await waitForRoomState(a2, (s) => s.code === code);
+
+  assert.equal(state.participants.find((p) => p.clientId === 'A').vote, 5); // votes preserved
+  assert.equal(state.history.length, 1);                                    // history preserved
+  assert.equal(state.history[0].finalValue, '5');
+
+  const hist = await fetch(`http://127.0.0.1:${port2}/api/rooms/${code}/estimates`).then((r) => r.json());
+  assert.equal(hist.estimates.length, 1);
+  assert.equal(hist.estimates[0].voterCount, 2);
+  assert.deepEqual(hist.estimates[0].votes, [{ name: 'Ana', vote: 5 }, { name: 'Bruno', vote: 8 }]);
+
+  a2.close();
+  await new Promise((r) => s2.httpServer.close(r));
+});
+
+test('8. non-facilitator cannot save an estimate', async () => {
+  const config = {
+    port: 0,
+    roomTtlMs: 24 * 60 * 60 * 1000,
+    databaseUrl: `file:${tmpdir()}/scrum-nf-${randomUUID()}.db`,
+    databaseAuthToken: undefined,
+  };
+  const s = await createServer(config);
+  await new Promise((r) => s.httpServer.listen(0, r));
+  const port = s.httpServer.address().port;
+  const code = (await fetch(`http://127.0.0.1:${port}/api/rooms`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientId: 'A' }),
+  }).then((r) => r.json())).code;
+
+  const a = ioc(`http://127.0.0.1:${port}`, { forceNew: true, transports: ['websocket'] });
+  const b = ioc(`http://127.0.0.1:${port}`, { forceNew: true, transports: ['websocket'] });
+  a.emit('joinRoom', { code, name: 'Ana', clientId: 'A' });
+  b.emit('joinRoom', { code, name: 'Bruno', clientId: 'B' });
+  await waitForRoomState(a, (s) => s.participants.length === 2);
+  a.emit('vote', { value: 5 });
+  a.emit('reveal');
+  await waitForRoomState(a, (s) => s.revealed === true);
+  b.emit('saveEstimate', { finalValue: 5 }); // B is NOT facilitator
+
+  await new Promise((r) => setTimeout(r, 300)); // settle window
+  const hist = await fetch(`http://127.0.0.1:${port}/api/rooms/${code}/estimates`).then((r) => r.json());
+  assert.equal(hist.estimates.length, 0); // nothing saved
+
+  a.close(); b.close();
+  await new Promise((r) => s.httpServer.close(r));
+});
+
+test('saved estimate is not duplicated after a restart (estimateSaved restored)', async () => {
+  const config = {
+    port: 0,
+    roomTtlMs: 24 * 60 * 60 * 1000,
+    databaseUrl: `file:${tmpdir()}/scrum-dup-${randomUUID()}.db`,
+    databaseAuthToken: undefined,
+  };
+
+  // First instance: create, vote, reveal, save once.
+  const s1 = await createServer(config);
+  await new Promise((r) => s1.httpServer.listen(0, r));
+  const port1 = s1.httpServer.address().port;
+  const code = (await fetch(`http://localhost:${port1}/api/rooms`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientId: 'A' }),
+  }).then((r) => r.json())).code;
+  const a1 = ioc(`http://localhost:${port1}`, { forceNew: true, transports: ['websocket'] });
+  a1.emit('joinRoom', { code, name: 'Ana', clientId: 'A' });
+  await waitForRoomState(a1, (s) => s.participants.length === 1);
+  a1.emit('vote', { value: 5 });
+  await waitForRoomState(a1, (s) => s.participants[0].hasVoted);
+  a1.emit('reveal');
+  await waitForRoomState(a1, (s) => s.revealed === true);
+  a1.emit('saveEstimate', { finalValue: 5 });
+  await waitForRoomState(a1, (s) => s.history.length === 1);
+  a1.close();
+  await new Promise((r) => s1.httpServer.close(r));
+
+  // Restart: the room reloads still revealed; a second save must be a no-op.
+  const s2 = await createServer(config);
+  await new Promise((r) => s2.httpServer.listen(0, r));
+  const port2 = s2.httpServer.address().port;
+  const a2 = ioc(`http://localhost:${port2}`, { forceNew: true, transports: ['websocket'] });
+  a2.emit('joinRoom', { code, name: 'Ana', clientId: 'A' });
+  await waitForRoomState(a2, (s) => s.code === code && s.revealed === true);
+  a2.emit('saveEstimate', { finalValue: 8 }); // attempt duplicate on same revealed round
+  await new Promise((r) => setTimeout(r, 300)); // settle
+
+  const hist = await fetch(`http://localhost:${port2}/api/rooms/${code}/estimates`).then((r) => r.json());
+  assert.equal(hist.estimates.length, 1); // still only one — no duplicate
+
+  a2.close();
+  await new Promise((r) => s2.httpServer.close(r));
 });

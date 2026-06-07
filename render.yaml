@@ -16,3 +16,10 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "22"
+      - key: ROOM_TTL_HOURS
+        value: "24"
+      # Defina no painel do Render (Environment) — não commitar segredos:
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_AUTH_TOKEN
+        sync: false
