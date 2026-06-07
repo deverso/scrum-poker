@@ -169,3 +169,8 @@ body.home {
 .actions { display: flex; gap: 10px; justify-content: center; margin-top: 22px; }
 .actions .btn { width: auto; padding: 10px 20px; }
 .hint { text-align: center; color: var(--muted); font-size: 12px; margin-top: 10px; }
+
+.save-box { text-align: center; margin: 16px 0; }
+.save-label { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+.save-cards { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 12px; }
+.save-cards .card { width: 40px; height: 56px; font-size: 16px; }

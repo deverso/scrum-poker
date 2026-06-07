@@ -16,6 +16,7 @@ if (!code) location.href = 'index.html';
 
 const socket = io();
 let state = null;
+let finalValue = null; // facilitator's chosen final card before saving
 
 const els = {
   roomCode: document.getElementById('roomCode'),
@@ -23,6 +24,7 @@ const els = {
   story: document.getElementById('story'),
   table: document.getElementById('table'),
   result: document.getElementById('result'),
+  save: document.getElementById('save'),
   hand: document.getElementById('hand'),
   actions: document.getElementById('actions'),
   hint: document.getElementById('hint'),
@@ -45,6 +47,7 @@ socket.on('errorMessage', ({ message }) => {
 });
 
 socket.on('roomState', (s) => {
+  if (state && state.revealed && !s.revealed) finalValue = null; // round was reset
   state = s;
   render();
 });
@@ -79,6 +82,7 @@ function render() {
   renderStory();
   renderTable();
   renderResult();
+  renderSave();
   renderHand();
   renderActions();
 }
@@ -158,6 +162,50 @@ function renderResult() {
     }
     els.result.appendChild(wrap);
   }
+}
+
+function renderSave() {
+  els.save.innerHTML = '';
+  // Only the facilitator, only after reveal.
+  if (!isFacilitator() || !state.revealed) return;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'save-box';
+
+  const label = document.createElement('div');
+  label.className = 'save-label';
+  label.textContent = 'Valor final acordado:';
+  wrap.appendChild(label);
+
+  // Default the selection to the most-voted card (mode) once per reveal.
+  if (finalValue === null && state.stats) finalValue = state.stats.mode;
+
+  const cards = document.createElement('div');
+  cards.className = 'save-cards';
+  for (const value of state.deck) {
+    const card = document.createElement('div');
+    const special = typeof value !== 'number';
+    card.className = 'card' + (special ? ' special' : '') + (value === finalValue ? ' selected' : '');
+    card.textContent = value;
+    card.addEventListener('click', () => {
+      finalValue = value;
+      renderSave();
+    });
+    cards.appendChild(card);
+  }
+  wrap.appendChild(cards);
+
+  const btn = document.createElement('button');
+  btn.className = 'btn primary';
+  btn.textContent = 'Salvar estimativa';
+  btn.disabled = finalValue === null;
+  btn.addEventListener('click', () => {
+    if (finalValue === null) return;
+    socket.emit('saveEstimate', { finalValue });
+  });
+  wrap.appendChild(btn);
+
+  els.save.appendChild(wrap);
 }
 
 function renderHand() {
