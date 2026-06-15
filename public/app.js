@@ -261,16 +261,25 @@ function renderActions() {
     els.hint.textContent = 'Aguardando o facilitador 👑 controlar a rodada.';
     return;
   }
-  const btn = document.createElement('button');
-  btn.className = 'btn primary';
   if (state.revealed) {
-    btn.textContent = 'Nova rodada';
-    btn.addEventListener('click', () => socket.emit('newRound'));
+    const btnReVote = document.createElement('button');
+    btnReVote.className = 'btn';
+    btnReVote.textContent = 'Re-votar mesma tarefa';
+    btnReVote.addEventListener('click', () => socket.emit('newRound'));
+    els.actions.appendChild(btnReVote);
+
+    const btnNewTask = document.createElement('button');
+    btnNewTask.className = 'btn primary';
+    btnNewTask.textContent = 'Nova tarefa';
+    btnNewTask.addEventListener('click', () => socket.emit('newTask'));
+    els.actions.appendChild(btnNewTask);
   } else {
+    const btn = document.createElement('button');
+    btn.className = 'btn primary';
     btn.textContent = 'Revelar votos';
     btn.addEventListener('click', () => socket.emit('reveal'));
+    els.actions.appendChild(btn);
   }
-  els.actions.appendChild(btn);
 }
 
 function fmtDate(ms) {
