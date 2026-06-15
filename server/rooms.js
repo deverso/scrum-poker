@@ -92,6 +92,7 @@ export function serializeRoom(room, viewerId) {
     connected: p.connected,
     hasVoted: p.vote !== null,
     vote: room.revealed || clientId === viewerId ? p.vote : null,
+    editedAfterReveal: !!p.editedAfterReveal,
   }));
 
   const votes = [...room.participants.values()]

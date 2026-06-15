@@ -252,3 +252,19 @@ test('serializeRoom includes the history array', () => {
   const view = serializeRoom(room, 'fac-1');
   assert.deepEqual(view.history, [{ id: 1, storyTitle: 'Login', finalValue: '5', consensus: 'close', createdAt: 10 }]);
 });
+
+test('serializeRoom exposes editedAfterReveal per participant', () => {
+  const room = makeRoom('R', 'fac-1');
+  addParticipant(room, 'fac-1', 'Ana');
+  addParticipant(room, 'p-2', 'Bruno');
+  setVote(room, 'fac-1', 5);
+  setVote(room, 'p-2', 3);
+  reveal(room, 'fac-1');
+  setVote(room, 'fac-1', 8); // edita → editedAfterReveal = true
+
+  const view = serializeRoom(room, 'fac-1');
+  const ana = view.participants.find((p) => p.clientId === 'fac-1');
+  const bruno = view.participants.find((p) => p.clientId === 'p-2');
+  assert.equal(ana.editedAfterReveal, true);
+  assert.equal(bruno.editedAfterReveal, false);
+});
