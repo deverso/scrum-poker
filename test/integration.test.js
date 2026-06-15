@@ -271,7 +271,7 @@ test('5. invalid room code emits errorMessage', async () => {
   }
 });
 
-test('6. facilitator promotion on disconnect', async () => {
+test('6. facilitator keeps role on disconnect and retains it on reconnect', async () => {
   const code = await createRoom('A');
 
   const sockA = connectClient();
@@ -284,14 +284,26 @@ test('6. facilitator promotion on disconnect', async () => {
     sockB.emit('joinRoom', { code, name: 'Bruno', clientId: 'B' });
     await waitForRoomState(sockA, (s) => s.participants.length === 2);
 
-    // Disconnect A (the facilitator); B should be promoted
-    const promotionPromise = waitForRoomState(sockB, (s) => s.facilitatorId === 'B');
+    // Disconnect A (the facilitator); role should remain on A while disconnected
+    const afterDisconnect = waitForRoomState(sockB, (s) =>
+      s.participants.some((p) => p.clientId === 'A' && !p.connected)
+    );
     sockA.disconnect();
-    const stateAfterDisconnect = await promotionPromise;
+    const stateAfterDisconnect = await afterDisconnect;
+    assert.equal(stateAfterDisconnect.facilitatorId, 'A', 'facilitatorId stays on A while disconnected');
 
-    assert.equal(stateAfterDisconnect.facilitatorId, 'B', 'B should be promoted to facilitator after A disconnects');
+    // A reconnects; should still be facilitator
+    const sockA2 = connectClient();
+    try {
+      sockA2.emit('joinRoom', { code, name: 'Alice', clientId: 'A' });
+      const stateAfterReconnect = await waitForRoomState(sockB, (s) =>
+        s.participants.some((p) => p.clientId === 'A' && p.connected)
+      );
+      assert.equal(stateAfterReconnect.facilitatorId, 'A', 'A is still facilitator after reconnecting');
+    } finally {
+      sockA2.disconnect();
+    }
   } finally {
-    // sockA already disconnected
     sockB.disconnect();
   }
 });
@@ -431,4 +443,42 @@ test('saved estimate is not duplicated after a restart (estimateSaved restored)'
 
   a2.close();
   await new Promise((r) => s2.httpServer.close(r));
+});
+
+test('9. post-reveal vote edit updates stats for all participants', async () => {
+  const code = await createRoom('A');
+  const sockA = connectClient();
+  const sockB = connectClient();
+
+  try {
+    sockA.emit('joinRoom', { code, name: 'Alice', clientId: 'A' });
+    await waitForRoomState(sockA, (s) => s.participants.some((p) => p.clientId === 'A'));
+
+    sockB.emit('joinRoom', { code, name: 'Bruno', clientId: 'B' });
+    await waitForRoomState(sockA, (s) => s.participants.length === 2);
+
+    sockA.emit('vote', { value: 5 });
+    sockB.emit('vote', { value: 3 });
+    await waitForRoomState(sockA, (s) => s.participants.every((p) => p.hasVoted));
+
+    sockA.emit('reveal');
+    await waitForRoomState(sockA, (s) => s.revealed);
+
+    // Bruno edits his vote after reveal
+    sockB.emit('vote', { value: 5 });
+    const stateAfterEdit = await waitForRoomState(sockA, (s) => {
+      const bruno = s.participants.find((p) => p.clientId === 'B');
+      return bruno && bruno.editedAfterReveal === true;
+    });
+
+    // Stats should reflect the new vote (5 and 5 → average 5, consensus)
+    assert.equal(stateAfterEdit.stats.average, 5);
+    assert.equal(stateAfterEdit.consensus, 'consensus');
+
+    const bruno = stateAfterEdit.participants.find((p) => p.clientId === 'B');
+    assert.equal(bruno.editedAfterReveal, true);
+  } finally {
+    sockA.disconnect();
+    sockB.disconnect();
+  }
 });
