@@ -55,13 +55,36 @@ test('setVote accepts deck values and rejects unknown values', () => {
   assert.equal(room.participants.get('fac-1').vote, 8);
 });
 
-test('setVote is ignored after reveal', () => {
+test('setVote after reveal updates vote and sets editedAfterReveal', () => {
   const room = makeRoom('R', 'fac-1');
   addParticipant(room, 'fac-1', 'Ana');
   setVote(room, 'fac-1', 5);
   reveal(room, 'fac-1');
   setVote(room, 'fac-1', 8);
-  assert.equal(room.participants.get('fac-1').vote, 5);
+  const p = room.participants.get('fac-1');
+  assert.equal(p.vote, 8);
+  assert.equal(p.editedAfterReveal, true);
+});
+
+test('setVote after reveal without prior vote does NOT set editedAfterReveal', () => {
+  const room = makeRoom('R', 'fac-1');
+  addParticipant(room, 'fac-1', 'Ana');
+  reveal(room, 'fac-1');
+  setVote(room, 'fac-1', 5);
+  const p = room.participants.get('fac-1');
+  assert.equal(p.vote, 5);
+  assert.equal(p.editedAfterReveal, undefined);
+});
+
+test('newRound clears editedAfterReveal', () => {
+  const room = makeRoom('R', 'fac-1');
+  addParticipant(room, 'fac-1', 'Ana');
+  setVote(room, 'fac-1', 5);
+  reveal(room, 'fac-1');
+  setVote(room, 'fac-1', 8);
+  assert.equal(room.participants.get('fac-1').editedAfterReveal, true);
+  newRound(room, 'fac-1');
+  assert.equal(room.participants.get('fac-1').editedAfterReveal, false);
 });
 
 test('reveal only works for the facilitator', () => {
@@ -96,13 +119,35 @@ test('setStory updates title for facilitator only', () => {
   assert.equal(room.storyTitle, 'PROJ-1 Login');
 });
 
-test('disconnectParticipant promotes oldest connected participant to facilitator', () => {
+test('disconnectParticipant keeps facilitatorId so the facilitator can reconnect', () => {
   const room = makeRoom('R', 'fac-1');
   addParticipant(room, 'fac-1', 'Ana');
   addParticipant(room, 'p-2', 'Bruno');
   addParticipant(room, 'p-3', 'Carla');
   disconnectParticipant(room, 'fac-1');
-  assert.equal(room.facilitatorId, 'p-2');
+  // facilitator is preserved — reconnecting restores their role
+  assert.equal(room.facilitatorId, 'fac-1');
+});
+
+test('addParticipant claims facilitator only when facilitatorId has no entry in participants', () => {
+  // Simulates the case where the original facilitator never returns and someone new joins.
+  const room = makeRoom('R', 'ghost-fac');
+  // ghost-fac is not in participants (e.g. reloaded room where they never reconnected)
+  addParticipant(room, 'p-1', 'Bruno');
+  assert.equal(room.facilitatorId, 'p-1');
+});
+
+test('reconnecting facilitator retains their role after a disconnect', () => {
+  const room = makeRoom('R', 'fac-1');
+  addParticipant(room, 'fac-1', 'Ana');
+  addParticipant(room, 'p-2', 'Bruno');
+  disconnectParticipant(room, 'fac-1');
+  assert.equal(room.facilitatorId, 'fac-1'); // still theirs while disconnected
+  addParticipant(room, 'fac-1', 'Ana');      // reconnects
+  assert.equal(room.facilitatorId, 'fac-1'); // still theirs after reconnect
+  // and they can still exercise facilitator actions
+  reveal(room, 'fac-1');
+  assert.equal(room.revealed, true);
 });
 
 test('serializeRoom masks other votes before reveal but shows own vote', () => {

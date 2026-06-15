@@ -29,10 +29,11 @@ export function addParticipant(room, clientId, name) {
 }
 
 export function setVote(room, clientId, value) {
-  if (room.revealed) return;
   if (!room.deck.includes(value)) return;
   const p = room.participants.get(clientId);
-  if (p) p.vote = value;
+  if (!p) return;
+  if (room.revealed && p.vote !== null) p.editedAfterReveal = true;
+  p.vote = value;
 }
 
 export function reveal(room, clientId) {
@@ -43,7 +44,10 @@ export function reveal(room, clientId) {
 export function newRound(room, clientId) {
   if (clientId !== room.facilitatorId) return;
   room.revealed = false;
-  for (const p of room.participants.values()) p.vote = null;
+  for (const p of room.participants.values()) {
+    p.vote = null;
+    p.editedAfterReveal = false;
+  }
 }
 
 export function setStory(room, clientId, title) {
@@ -54,17 +58,9 @@ export function setStory(room, clientId, title) {
 export function disconnectParticipant(room, clientId) {
   const p = room.participants.get(clientId);
   if (p) p.connected = false;
-  if (clientId === room.facilitatorId) promoteFacilitator(room);
-}
-
-function promoteFacilitator(room) {
-  // Map preserves insertion order; pick the oldest still-connected participant.
-  for (const [id, p] of room.participants) {
-    if (p.connected) {
-      room.facilitatorId = id;
-      return;
-    }
-  }
+  // Do not auto-promote on disconnect: the facilitator may reconnect shortly
+  // (tab refresh, network blip). The claim-if-empty logic in addParticipant
+  // handles the case where the facilitator never returns.
 }
 
 export function hasConnectedParticipants(room) {
@@ -102,6 +98,7 @@ export function serializeRoom(room, viewerId) {
     stats: room.revealed ? computeStats(votes) : null,
     consensus: room.revealed ? consensusLevel(votes, room.deck) : null,
     history: room.history ?? [],
+    estimateSaved: !!room.estimateSaved,
   };
 }
 
