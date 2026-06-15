@@ -7,6 +7,7 @@ import {
   setVote,
   reveal,
   newRound,
+  newTask,
   setStory,
   disconnectParticipant,
   hasConnectedParticipants,
@@ -107,6 +108,27 @@ test('newRound clears votes and unreveals (facilitator only)', () => {
   newRound(room, 'fac-1');
   assert.equal(room.revealed, false);
   assert.equal(room.participants.get('fac-1').vote, null);
+});
+
+test('newTask clears votes, editedAfterReveal, storyTitle and unreveals (facilitator only)', () => {
+  const room = makeRoom('R', 'fac-1');
+  addParticipant(room, 'fac-1', 'Ana');
+  addParticipant(room, 'p-2', 'Bruno');
+  setStory(room, 'fac-1', 'PROJ-1 Login');
+  setVote(room, 'fac-1', 5);
+  reveal(room, 'fac-1');
+  setVote(room, 'fac-1', 8); // edita após reveal
+  assert.equal(room.participants.get('fac-1').editedAfterReveal, true);
+
+  newTask(room, 'p-2'); // não-facilitador → no-op
+  assert.equal(room.revealed, true);
+
+  newTask(room, 'fac-1');
+  assert.equal(room.revealed, false);
+  assert.equal(room.storyTitle, '');
+  assert.equal(room.participants.get('fac-1').vote, null);
+  assert.equal(room.participants.get('fac-1').editedAfterReveal, false);
+  assert.equal(room.participants.get('p-2').vote, null);
 });
 
 test('setStory updates title for facilitator only', () => {

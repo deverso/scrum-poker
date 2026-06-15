@@ -19,6 +19,7 @@ import {
   setVote,
   reveal,
   newRound,
+  newTask,
   setStory,
   disconnectParticipant,
   serializeRoom,
@@ -127,6 +128,17 @@ export async function createServer(config) {
       const room = store.getRoom(sess.code);
       if (!room) return;
       newRound(room, sess.clientId);
+      room.estimateSaved = false;
+      broadcastRoom(sess.code);
+      await persistFullRoom(db, room, Date.now());
+    }));
+
+    socket.on('newTask', guard(async () => {
+      const sess = sessions.get(socket.id);
+      if (!sess) return;
+      const room = store.getRoom(sess.code);
+      if (!room) return;
+      newTask(room, sess.clientId);
       room.estimateSaved = false;
       broadcastRoom(sess.code);
       await persistFullRoom(db, room, Date.now());

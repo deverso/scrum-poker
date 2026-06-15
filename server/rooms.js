@@ -50,6 +50,16 @@ export function newRound(room, clientId) {
   }
 }
 
+export function newTask(room, clientId) {
+  if (clientId !== room.facilitatorId) return;
+  room.revealed = false;
+  room.storyTitle = '';
+  for (const p of room.participants.values()) {
+    p.vote = null;
+    p.editedAfterReveal = false;
+  }
+}
+
 export function setStory(room, clientId, title) {
   if (clientId !== room.facilitatorId) return;
   room.storyTitle = String(title ?? '').slice(0, 200);
