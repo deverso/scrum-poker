@@ -9,10 +9,11 @@ function getClientId() {
 }
 
 const clientId = getClientId();
-const name = localStorage.getItem('name') || 'Anônimo';
+const name = localStorage.getItem('name');
 const code = (new URLSearchParams(location.search).get('code') || '').toUpperCase();
 
-if (!code) location.href = 'index.html';
+if (!code) { location.href = 'index.html'; throw new Error('redirect'); }
+if (!name) { location.href = `index.html?code=${encodeURIComponent(code)}`; throw new Error('redirect'); }
 
 const socket = io();
 let state = null;
@@ -139,7 +140,7 @@ function renderTable() {
 
     const mini = document.createElement('div');
     if (state.revealed) {
-      mini.className = 'mini face';
+      mini.className = 'mini face' + (p.editedAfterReveal ? ' edited' : '');
       mini.textContent = p.vote === null ? '–' : p.vote;
     } else if (p.hasVoted) {
       mini.className = 'mini back';
@@ -220,22 +221,28 @@ function renderSave() {
   }
   wrap.appendChild(cards);
 
-  const btn = document.createElement('button');
-  btn.className = 'btn primary';
-  btn.textContent = 'Salvar estimativa';
-  btn.disabled = finalValue === null;
-  btn.addEventListener('click', () => {
-    if (finalValue === null) return;
-    socket.emit('saveEstimate', { finalValue });
-  });
-  wrap.appendChild(btn);
+  if (state.estimateSaved) {
+    const saved = document.createElement('div');
+    saved.className = 'save-confirm';
+    saved.textContent = '✅ Estimativa salva!';
+    wrap.appendChild(saved);
+  } else {
+    const btn = document.createElement('button');
+    btn.className = 'btn primary';
+    btn.textContent = 'Salvar estimativa';
+    btn.disabled = finalValue === null;
+    btn.addEventListener('click', () => {
+      if (finalValue === null) return;
+      socket.emit('saveEstimate', { finalValue });
+    });
+    wrap.appendChild(btn);
+  }
 
   els.save.appendChild(wrap);
 }
 
 function renderHand() {
   els.hand.innerHTML = '';
-  if (state.revealed) return; // no voting while revealed
   const selected = myVote();
   for (const value of state.deck) {
     const card = document.createElement('div');
